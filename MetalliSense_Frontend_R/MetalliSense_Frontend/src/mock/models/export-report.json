@@ -1,0 +1,35 @@
+{
+  "alloy": {
+    "bytes": 1853699,
+    "keys": [
+      "model",
+      "scaler_X",
+      "scaler_y",
+      "grade_encodings",
+      "elements",
+      "is_trained"
+    ]
+  },
+  "anomaly": {
+    "bytes": 1288574,
+    "keys": [
+      "model",
+      "scaler",
+      "elements",
+      "is_trained",
+      "score_min",
+      "score_max"
+    ]
+  },
+  "reward": {
+    "bytes": 493,
+    "keys": [
+      "kind",
+      "coef",
+      "intercept",
+      "t",
+      "eta0",
+      "alpha"
+    ]
+  }
+}
