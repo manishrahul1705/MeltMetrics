@@ -158,6 +158,14 @@ router.get('/additives', wrap(() => additives.inventory()));
 router.post('/additives/deduct', wrap((req) => {
   const lines = req.body?.lines || [];
   if (!lines.length) throw bad(400, 'lines is required');
+  const demand = {};
+  for(const l of lines) {
+    const lot = store.getLot(l.lotId), kg=Number(l.kg);
+    if(!lot || lot.materialType !== 'FERROALLOY' || !['RELEASED','RESTRICTED'].includes(lot.status)) throw bad(400,'Released ferroalloy lot required');
+    if(!Number.isFinite(kg) || kg<=0) throw bad(400,'kg must be finite and positive');
+    demand[l.lotId]=(demand[l.lotId]||0)+kg;
+  }
+  for(const [id,kg] of Object.entries(demand)) if(kg>store.availableKg(id)) throw bad(409,`${id}: insufficient stock for all deduction lines`);
   const results = [];
   lines.forEach((l) => {
     const lot = store.getLot(l.lotId);
@@ -241,7 +249,7 @@ function validateCharge(charge) {
   return charge.map((l) => {
     const kg = Number(l.kg);
     if (!l.lotId || !store.getLot(l.lotId)) throw bad(400, `Unknown lot ${l.lotId}`);
-    if (!(kg > 0)) throw bad(400, `${l.lotId}: kg must be positive`);
+    if (!Number.isFinite(kg) || !(kg > 0)) throw bad(400, `${l.lotId}: kg must be positive`);
     if (seen.has(l.lotId)) throw bad(400, `${l.lotId} appears twice — merge the lines`);
     seen.add(l.lotId);
     return { lotId: l.lotId, kg: Math.round(kg * 10) / 10 };

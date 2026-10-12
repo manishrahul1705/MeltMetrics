@@ -1,3 +1,4 @@
+import modelFixtures from './model-fixtures.json';
 import { beforeAll,afterAll,beforeEach,describe,it,expect } from 'vitest';
 import { createRequire } from 'node:module';
 import { startMock,dispatch,requirePort,reset } from '../src/mock/server.js';
@@ -43,4 +44,15 @@ describe('gate parity and interlocks',()=>{
  it('requires a current gate and operator before start',()=>{const st=requirePort('premeltGate/store'),h=st.heats.add({grade,targetKg:1000,charge:[],status:'PLANNED',gate:null,gateHistory:[]});expect(()=>requirePort('premeltGate/gateEngine').startMelting(h.heatId,{})).toThrow(/Operator/);expect(()=>requirePort('premeltGate/gateEngine').startMelting(h.heatId,{operator:'Tester'})).toThrow(/pre-melt/);});
  it('persists mutations, has no 500 event audit cap',async()=>{const st=requirePort('premeltGate/store');for(let i=0;i<550;i++)st.log('TEST','unit','tester','event '+i);await dispatch('GET','http://static.local/api/v2/premelt/audit?limit=9999');expect(st.audit().length).toBeGreaterThan(500);expect(saved.get('metallisense.browser-demo.v1')).toContain('event 549');});
  it('never deducts a planned heat before human approval',async()=>{const st=requirePort('premeltGate/store'),before=st.availableKg('PIG-0901');const r=await dispatch('POST','http://local/api/v2/premelt/heats',{grade,targetKg:1000,charge:[{lotId:'PIG-0901',kg:1000}]});expect(r.status).toBe(200);expect(st.availableKg('PIG-0901')).toBe(before);});
+});
+
+describe('exported model numerical parity',()=>{
+ for(const sample of modelFixtures)it(sample.grade+' '+sample.case,async()=>{
+  const a=await anomaly(sample.grade,sample.composition),c=await alloy(sample.grade,sample.composition);
+  expect(a.raw_score).toBeCloseTo(sample.anomaly.raw_score,6);
+  expect(a.anomaly_score).toBeCloseTo(sample.anomaly.anomaly_score,6);
+  expect(a.severity).toBe(sample.anomaly.severity);
+  expect(c.recommended_additions).toEqual(sample.alloy.recommended_additions);
+  expect(c.confidence).toBeCloseTo(sample.alloy.confidence,6);
+ });
 });
