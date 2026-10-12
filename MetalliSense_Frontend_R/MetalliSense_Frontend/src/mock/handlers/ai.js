@@ -1,4 +1,4 @@
-﻿import { scale,evaluate,isolation } from '../models/evaluator.js';
+import { scale,evaluate,isolation } from '../models/evaluator.js';
 import specs from '../models/grade-model-specs.json';
 import thresholds from '../models/thresholds.json';
 import { STANDARDS,predictFromChemistry } from './mechanical.js';
@@ -62,7 +62,7 @@ export async function createAI(req,state,notify){
  function recall(query,limit=5,collection='heats'){
   const docs=collection==='grades'?Object.values(specs).map(g=>({text:JSON.stringify(g),metadata:g})):collection==='training_data'?req('csvDataStore').getAll().map(r=>({text:JSON.stringify(r),metadata:r})):state().memory.concat(req('premeltGate/store').heats.list().map(h=>({text:JSON.stringify(h),metadata:{heatId:h.heatId,grade:h.grade,status:h.status}})));
   const terms=String(query).toLowerCase().match(/[a-z0-9-]+/g)||[];const df=Object.fromEntries(terms.map(t=>[t,docs.filter(d=>d.text.toLowerCase().includes(t)).length]));
-  return docs.map((d,i)=>{const lower=d.text.toLowerCase();const score=terms.reduce((s,t)=>s+(lower.includes(t)?Math.log(1+docs.length/(1+(df[t]||0))):0),0);return {id:d.metadata?.heatId||d.metadata?._id||String(i),text:d.text,metadata:d.metadata,score,similarity:score/(score+1),payload:d.metadata};}).filter(d=>d.score>0).sort((a,b)=>b.score-a.score).slice(0,limit);
+  return docs.map((d,i)=>{const lower=d.text.toLowerCase();const score=terms.reduce((s,t)=>s+(lower.includes(t)?Math.log(1+docs.length/(1+(df[t]||0))):0),0);return {id:d.metadata?.heatId||d.metadata?._id||String(i),text:d.text,metadata:d.metadata,score:score/(score+1),similarity:score/(score+1),payload:d.metadata};}).filter(d=>d.score>0).sort((a,b)=>b.score-a.score).slice(0,limit);
  }
  function chat(message){
   const store=req('premeltGate/store'),text=message.toLowerCase(),id=message.match(/h-\d+/i)?.[0]?.toUpperCase(),h=id?store.heats.get(id):store.heats.list().find(h=>h.status==='MELTING')||store.heats.get('H-1051');
@@ -90,7 +90,11 @@ export async function createAI(req,state,notify){
    else if(path==='/rl/feedback')data=method==='GET'?state().feedback:feedback(b);
    else if(path==='/rl/policy/status')data=status();
    else if(path==='/mechanical/predict')data=predictFromChemistry(b.grade,...['C','Si','Mn','P','S'].map(e=>Number(b.composition[e])||0));
-   else if(path==='/mechanical/standards')data=STANDARDS;
+   else if(path==='/mechanical/predict/batch')data={results:b.items.map(i=>predictFromChemistry(i.grade,...['C','Si','Mn','P','S'].map(e=>Number(i.composition[e])||0))),count:b.items.length};
+   else if(path==='/mechanical/standards')data={standards:STANDARDS};
+   else if(path.startsWith('/mechanical/standards/')){const g=path.split('/').at(-1);if(!STANDARDS[g])throw Object.assign(new Error('Unknown grade'),{status:404});data={grade:g,...STANDARDS[g]};}
+   else if(path==='/mechanical/model-info')data={status:'formula_only',message:'Browser deterministic formula mode; Python ML mechanical artifacts are not shipped'};
+   else if(path==='/mechanical/ce-check'){const ce=Number(b.composition.C)+Number(b.composition.Mn)/6,lim=STANDARDS[b.grade]?.ce_max;data={carbon_equivalent:round(ce),ce_limit:lim,ce_margin:lim?round(lim-ce):null,status:!lim||ce<=lim?'PASS':'FAIL',weldability:ce<=.4?'OK':ce<=.45?'REDUCED':'POOR',budget:[{element:'C',value:b.composition.C,ce_contribution:b.composition.C,share_pct:ce?round(b.composition.C/ce*100):0},{element:'Mn/6',value:b.composition.Mn,ce_contribution:round(b.composition.Mn/6),share_pct:ce?round(b.composition.Mn/6/ce*100):0}]};}
    else if(path.startsWith('/copilot/voice/')){
     if(path.endsWith('status'))data={tts_available:'speechSynthesis' in window,stt_available:!!(window.SpeechRecognition||window.webkitSpeechRecognition),provider:'browser',tts_provider:'browser'};
     else if(path.endsWith('languages'))data={languages:{en:'English',hi:'Hindi',ta:'Tamil'}};

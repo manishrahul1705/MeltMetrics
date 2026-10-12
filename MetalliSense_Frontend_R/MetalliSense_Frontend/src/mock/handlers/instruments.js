@@ -3,7 +3,7 @@ export function parseCSV(text){
  for(let i=0;i<String(text).length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(cell.trim());cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell.trim());if(row.some(Boolean))rows.push(row);row=[];cell='';}else cell+=c;}
  row.push(cell.trim());if(row.some(Boolean))rows.push(row);const headers=rows.shift()||[];return rows.map(r=>Object.fromEntries(headers.map((h,i)=>[h,r[i]??''])));
 }
-export function createInstruments(req,state,persist){
+export function createInstruments(req,state,persist,notify){
  let connected=false,gunConnected=false,live=null,gunTimer,timer,argon=100,seq=0;
  const store=()=>req('premeltGate/store');
  function reading(grade,deviations=[],percent=10){
@@ -33,7 +33,7 @@ export function createInstruments(req,state,persist){
   live={sessionId,lotId:b.lotId,device,inspector:b.inspector||'Yard inspector',status:'Testing',piecesPlanned:pieces,piecesDone:0,readings:[],result:null,error:null,startedAt:new Date(),supplierGrade};gunConnected=true;
   gunTimer=setInterval(async()=>{
    live.piecesDone++;argon=Math.max(0,argon-(device==='LIBS'?.2:0));live.argonRemaining=argon;const csv=req('premeltGate/gunSimulator').toCsv(sim.rows.slice(0,live.piecesDone));live.readings=req('premeltGate/gunIngest').parseCsv(csv).map(r=>({...r,flags:req('premeltGate/gunIngest').flagPiece(r)}));
-   if(live.piecesDone>=sim.rows.length){clearInterval(gunTimer);gunTimer=null;try{const s=req('premeltGate/gunIngest').ingestCsv(csv,{sessionId,inspector:live.inspector,via:'BROWSER_SIMULATOR'});live.result={evidence:s.evidence,decision:s.decision,lot:store().view(lot)};live.status='Session Complete';}catch(e){live.error=e.message;live.status='Error';}}
+   if(live.piecesDone>=sim.rows.length){clearInterval(gunTimer);gunTimer=null;try{const s=req('premeltGate/gunIngest').ingestCsv(csv,{sessionId,inspector:live.inspector,via:'BROWSER_SIMULATOR'});live.result={evidence:s.evidence,decision:s.decision,lot:store().view(lot)};live.status='Session Complete';if(lot.status==='QUARANTINED'&&!state().notifiedLots.includes(lot.lotId)){state().notifiedLots.push(lot.lotId);notify?.('Lot quarantined',lot.lotId,lot.statusReason);}}catch(e){live.error=e.message;live.status='Error';}}
    await persist();
   },350);return live;
  }};

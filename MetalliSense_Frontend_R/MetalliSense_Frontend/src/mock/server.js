@@ -68,6 +68,8 @@ export async function dispatch(method,url,body){
    st.log('STRATEGY_ACCEPTED',h.heatId,'operator',b.candidate.strategy+'; accepted candidate quantities deducted');await persist();return {status:200,data:{status:'success',data:h.acceptedStrategy}};
   } catch(e){st.restore(before);extra=oldExtra;return {status:409,data:{message:e.message}};}
  }
+ if(path==='/api/v2/sales/orders')return {status:200,data:{status:'success',data:extra.orders}};
+ if(path==='/api/v2/alerts/send-email'){const message=outbox('Deviation '+body.severity,body.batchId||body.grade,JSON.stringify(body));await persist();return {status:200,data:{status:'success',data:{sent:false,queued:true,message}}};}
  if(path==='/__mock/state')return {status:200,data:{store:requirePort('premeltGate/store').snapshot(),extra}};
  if(path==='/__mock/reset'||path==='/api/v2/premelt/demo/reset'){await reset();return {status:200,data:{status:'success',data:{reset:true}}};}
  // The browser reads instrument downloads with fetch, never a remote navigation.
@@ -82,6 +84,8 @@ export async function dispatch(method,url,body){
  if(result.status<400 && method!=='GET') {
   const store=requirePort('premeltGate/store');
   if(/analyze|predict|optimize|recommend|explain/.test(path))store.log('RECOMMENDATION',body?.heatId||body?.grade||body?.metalGrade||path,'demo decision support',method+' '+path);
+  if(path==='/api/v2/sales/invoices'){const order=extra.orders.find(o=>o.id===body.poNumber);if(order){order.status='INVOICED';order.heatId=body.heatId;order.invoiceId=result.data?.data?.invoiceId;}}
+  if(path==='/api/v2/alerts/simulate'){const a=result.data?.data;if(a)outbox(a.subject,body.batchId||body.grade,a.body);}
   if(path.includes('gate-check')){const g=result.data?.data;if(g?.decision==='HOLD')outbox('Heat HOLD',g.heatId,g.blocking.join('\n'));}
   for(const lot of store.listLots())if(lot.status==='QUARANTINED'&&!extra.notifiedLots.includes(lot.lotId)){extra.notifiedLots.push(lot.lotId);outbox('Lot quarantined',lot.lotId,lot.statusReason);}
  }
@@ -97,13 +101,13 @@ export async function persist(){
 }
 export async function reset(){
  instruments?.stop();await clearState();cache.clear();extra={outbox:[],notifiedLots:[],memory:[],chat:[],feedback:[],reward:null,activeHeat:null,readings:[],orders:[{id:'SO-1001',customerId:'CUST-01',grade:'SG-IRON',qtyKg:650,status:'OPEN'}]};
- instruments=createInstruments(requirePort,()=>extra,persist);ai=await createAI(requirePort,()=>extra,outbox);application=requirePort('server');instruments.start();
+ instruments=createInstruments(requirePort,()=>extra,persist,outbox);ai=await createAI(requirePort,()=>extra,outbox);application=requirePort('server');instruments.start();
  sessionStorage.removeItem('metallisense.meltFlow.v1');localStorage.removeItem('metallisense.demo.chat');await persist();
 }
 export function demoState(){return extra;}
 export async function startMock(){
  const stored=await loadState();extra=stored?.extra||{outbox:[],notifiedLots:[],memory:[],chat:[],feedback:[],reward:null,activeHeat:null,readings:[],orders:[{id:'SO-1001',customerId:'CUST-01',grade:'SG-IRON',qtyKg:650,status:'OPEN'}]};
- instruments=createInstruments(requirePort,()=>extra,persist);ai=await createAI(requirePort,()=>extra,outbox);application=requirePort('server');
+ instruments=createInstruments(requirePort,()=>extra,persist,outbox);ai=await createAI(requirePort,()=>extra,outbox);application=requirePort('server');
  if(stored)for(const [id,s]of Object.entries(stored.modules)){requirePort(id).restore?.(s);}
  instruments.start();
  const originalFetch=window.fetch.bind(window);

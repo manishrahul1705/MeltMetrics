@@ -32,6 +32,10 @@ const Dashboard = () => {
   const [selectedElement, setSelectedElement] = useState("Fe");
 
   useEffect(() => {
+    if (import.meta.env.VITE_MOCK_MODE === 'true') {
+      const refresh = async () => { const r=await fetch('/__mock/state'); const j=await r.json(); setStats({totalReadings:j.extra.readings.length,totalAnomalies:j.extra.outbox.filter(a=>a.subject.startsWith('Anomaly')).length,totalGrades:grades.length}); };
+      refresh(); window.addEventListener('mock-state',refresh); return () => window.removeEventListener('mock-state',refresh);
+    }
     // Fetch dashboard stats
     setStats({
       totalReadings: 1234,
